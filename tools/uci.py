@@ -4,6 +4,8 @@ import re, time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from functools import partial
+import searcher as searcher_module
+import position as position_module
 
 print = partial(print, flush=True)
 
@@ -14,16 +16,16 @@ def render_move(move, white_pov):
     i, j = move.i, move.j
     if not white_pov:
         i, j = 119 - i, 119 - j
-    render = sunfish.render
+    render = chessmodule.render
     return render(i) + render(j) + move.prom.lower()
 
 
 def parse_move(move_str, white_pov):
-    parse = sunfish.parse
+    parse = chessmodule.parse
     i, j, prom = parse(move_str[:2]), parse(move_str[2:4]), move_str[4:].upper()
     if not white_pov:
         i, j = 119 - i, 119 - j
-    return sunfish.Move(i, j, prom)
+    return position_module.Move(i, j, prom)
 
 
 def go_loop(searcher, hist, stop_event, max_movetime=0, max_depth=0, debug=False):
@@ -85,7 +87,7 @@ def mate_loop(
             if s0 >= 0 and s1 < 1:
                 break
         else:
-            score = searcher.bound(hist[-1], sunfish.MATE_LOWER, d)
+            score = searcher.bound(hist[-1], chessmodule.MATE_LOWER, d)
             elapsed = time.time() - start
             print(
                 "info depth",
@@ -97,7 +99,7 @@ def mate_loop(
                 "pv",
                 " ".join(pv(searcher, hist[-1], include_scores=False)),
             )
-            if score >= sunfish.MATE_LOWER:
+            if score >= chessmodule.MATE_LOWER:
                 break
         if elapsed > max_movetime:
             break
@@ -134,13 +136,13 @@ def perft(pos, depth, debug=False):
     print("Nodes searched:", total)
 
 
-def run(sunfish_module, startpos):
-    global sunfish
-    sunfish = sunfish_module
+def run(chess_module, startpos):
+    global chessmodule
+    chessmodule = chess_module
 
     debug = False
     hist = [startpos]
-    searcher = sunfish.Searcher()
+    searcher = searcher_module.Searcher()
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         # Noop future to get started
@@ -174,9 +176,9 @@ def run(sunfish_module, startpos):
                 go_future.result(timeout=0)
 
                 if args[0] == "uci":
-                    print(f"id name {sunfish.version}")
-                    for attr, (lo, hi) in sunfish.opt_ranges.items():
-                        default = getattr(sunfish, attr)
+                    print(f"id name {chessmodule.version}")
+                    for attr, (lo, hi) in searcher_module.opt_ranges.items():
+                        default = getattr(searcher_module, attr)
                         print(
                             f"option name {attr} type spin default {default} min {lo} max {hi}"
                         )
@@ -184,7 +186,7 @@ def run(sunfish_module, startpos):
 
                 elif args[0] == "setoption":
                     _, uci_key, _, uci_value = args[1:]
-                    setattr(sunfish, uci_key, int(uci_value))
+                    setattr(chessmodule, uci_key, int(uci_value))
 
                 elif args[0] == "isready":
                     print("readyok")
@@ -276,20 +278,20 @@ def from_fen(board, color, castling, enpas, _hclock, _fclock):
     board = "".join(board)
     wc = ("Q" in castling, "K" in castling)
     bc = ("k" in castling, "q" in castling)
-    ep = sunfish.parse(enpas) if enpas != "-" else 0
-    if hasattr(sunfish, 'features'):
-        wf, bf = sunfish.features(board)
-        pos = sunfish.Position(board, 0, wf, bf, wc, bc, ep, 0)
+    ep = chessmodule.parse(enpas) if enpas != "-" else 0
+    if hasattr(chessmodule, 'features'):
+        wf, bf = chessmodule.features(board)
+        pos = chessmodule.Position(board, 0, wf, bf, wc, bc, ep, 0)
         pos = pos._replace(score=pos.calculate_score())
     else:
-        score = sum(sunfish.pst[c][i] for i, c in enumerate(board) if c.isupper())
-        score -= sum(sunfish.pst[c.upper()][119-i] for i, c in enumerate(board) if c.islower())
-        pos = sunfish.Position(board, score, wc, bc, ep, 0)
+        score = sum(chessmodule.pst[c][i] for i, c in enumerate(board) if c.isupper())
+        score -= sum(chessmodule.pst[c.upper()][119-i] for i, c in enumerate(board) if c.islower())
+        pos = chessmodule.Position(board, score, wc, bc, ep, 0)
     return pos if color == 'w' else pos.rotate()
 
 
 def get_color(pos):
-    """A slightly hacky way to to get the color from a sunfish position"""
+    """A slightly hacky way to to get the color from a chessmodule position"""
     return BLACK if pos.board.startswith("\n") else WHITE
 
 
